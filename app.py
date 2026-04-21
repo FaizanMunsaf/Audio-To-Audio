@@ -2,8 +2,14 @@ import streamlit as st
 import whisper
 # import ollama
 import requests
-import sounddevice as sd
-import soundfile as sf
+try:
+    import sounddevice as sd
+    import soundfile as sf
+    SOUNDDEVICE_AVAILABLE = True
+except Exception:
+    sd = None
+    sf = None
+    SOUNDDEVICE_AVAILABLE = False
 import numpy as np
 import tempfile
 import os
@@ -368,10 +374,17 @@ def synthesize_speech(text: str, pipeline, voice: str = "af_heart") -> np.ndarra
     return np.array([])
 
 def play_audio(audio: np.ndarray, sample_rate: int = 24000):
-    sd.play(audio, samplerate=sample_rate)
-    sd.wait()
+    if not SOUNDDEVICE_AVAILABLE:
+        return
+    try:
+        sd.play(audio, samplerate=sample_rate)
+        sd.wait()
+    except Exception:
+        return
 
 def record_audio(duration: int = 5, sample_rate: int = 16000) -> str:
+    if not SOUNDDEVICE_AVAILABLE:
+        raise RuntimeError("Recording is not available: PortAudio / sounddevice not installed on this server.")
     recording = sd.rec(
         int(duration * sample_rate),
         samplerate=sample_rate,
@@ -452,11 +465,14 @@ with tab1:
     st.markdown("<br>", unsafe_allow_html=True)
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("⏺ Record Now", key="rec"):
-            with st.spinner(f"Recording for {rec_duration}s…"):
-                st.session_state.status = "listen"
-                user_audio_path = record_audio(duration=rec_duration)
-            st.success("Recording saved!")
+        if SOUNDDEVICE_AVAILABLE:
+            if st.button("⏺ Record Now", key="rec"):
+                with st.spinner(f"Recording for {rec_duration}s…"):
+                    st.session_state.status = "listen"
+                    user_audio_path = record_audio(duration=rec_duration)
+                st.success("Recording saved!")
+        else:
+            st.info("Recording disabled on this server: PortAudio not available.")
 
 with tab2:
     uploaded = st.file_uploader("Drop a .wav or .mp3 file", type=["wav", "mp3", "m4a"])
